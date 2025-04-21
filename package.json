@@ -17,7 +17,6 @@
   "dependencies": {
     "@prisma/client": "^6.6.0",
     "baileys": "^6.7.16",
-    "bull": "^4.12.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",
     "express": "^4.18.2",
@@ -35,6 +34,8 @@
     "winston": "^3.11.0"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@eslint/js": "^9.25.0",
     "@types/bull": "^4.10.4",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
@@ -48,10 +49,13 @@
     "@typescript-eslint/parser": "^6.19.1",
     "eslint": "^9.25.0",
     "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.2.6",
+    "globals": "^16.0.0",
     "prettier": "^3.2.4",
     "prisma": "^6.6.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.30.1"
   }
 }
