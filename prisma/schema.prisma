@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model WhatsappAccount {
+  id          Int                   @id @default(autoincrement())
+  phoneNumber String                @unique @map("phone_number")
+  status      WhatsappAccountStatus @default(INACTIVE)
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
+  deletedAt   DateTime?             @map("deleted_at")
+
+  messageLog MessageLog[]
+  Session    Session[]
+
+  @@map("whatsapp_accounts")
+}
+
+model Session {
+  id         Int    @id @default(autoincrement())
+  identifier String @db.VarChar(255)
+  data       String @db.Text
+
+  WhatsappAccount   WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+  whatsappAccountId Int             @map("whatsapp_account_id")
+
+  @@unique([whatsappAccountId, identifier])
+  @@index([whatsappAccountId])
+  @@map("session")
+}
+
+model MessageLog {
+  id         String        @id @default(uuid())
+  messageId  String        @map("message_id")
+  accountId  Int           @map("account_id")
+  status     MessageStatus @default(PENDING)
+  sentTime   DateTime      @default(now()) @map("sent_time")
+  retryCount Int           @default(0) @map("retry_count")
+  sendBy     Int           @map("send_by")
+
+  whatsappAccount WhatsappAccount @relation(fields: [accountId], references: [id])
+  apiKey          ApiKey          @relation(fields: [sendBy], references: [id])
+
+  @@map("message_logs")
+}
+
+model ApiKey {
+  id        Int        @id @default(autoincrement())
+  name      String
+  apiKey    String     @unique @map("api_key")
+  role      ApiKeyRole @default(SYSTEM)
+  createdAt DateTime   @default(now()) @map("created_at")
+  deletedAt DateTime?  @map("deleted_at")
+
+  messages MessageLog[]
+
+  @@map("api_keys")
+}
+
+enum MessageStatus {
+  SENT
+  PENDING
+  FAILED
+}
+
+enum ApiKeyRole {
+  ADMIN
+  SYSTEM
+}
+
+enum WhatsappAccountStatus {
+  ACTIVE
+  INACTIVE
+}
