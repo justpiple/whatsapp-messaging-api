@@ -16,22 +16,20 @@ const prisma =
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-if (globalForPrisma.prisma) {
-  globalForPrisma.prisma.$extends(
-    createSoftDeleteExtension({
-      models: {
-        WhatsappAccount: true,
-        ApiKey: true,
+const extendedPrisma = prisma.$extends(
+  createSoftDeleteExtension({
+    models: {
+      WhatsappAccount: true,
+      ApiKey: true,
+    },
+    defaultConfig: {
+      field: "deletedAt",
+      createValue: (deleted) => {
+        if (deleted) return new Date();
+        return null;
       },
-      defaultConfig: {
-        field: "deletedAt",
-        createValue: (deleted) => {
-          if (deleted) return new Date();
-          return null;
-        },
-      },
-    }),
-  );
-}
+    },
+  }),
+);
 
-export default prisma;
+export default extendedPrisma;

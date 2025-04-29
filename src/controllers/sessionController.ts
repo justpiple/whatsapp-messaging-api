@@ -200,10 +200,25 @@ export const restartSession = async (req: Request, res: Response) => {
   }
 };
 
+export const getWhatsAppAccounts = async (req: Request, res: Response) => {
+  try {
+    const existingAccount = await prisma.whatsappAccount.findMany();
+
+    return res.status(200).json({
+      message: "Successfully get data",
+      accounts: existingAccount,
+    });
+  } catch (error) {
+    logger.error("Error adding WhatsApp account:", error);
+    return res.status(500).json({ error: "Failed to fetch information" });
+  }
+};
+
 export default {
   addWhatsAppAccount,
   getQRCode,
   checkAccountStatus,
   terminateSession,
   restartSession,
+  getWhatsAppAccounts,
 };

@@ -7,6 +7,67 @@ const router = Router();
 /**
  * @swagger
  * /session:
+ *   get:
+ *     summary: Get list of WhatsApp accounts
+ *     description: Retrieve all WhatsApp account records from the database
+ *     tags: [Sessions]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved WhatsApp accounts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Successfully get data
+ *                 accounts:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         example: 1
+ *                       phoneNumber:
+ *                         type: string
+ *                         example: "+6281234567890"
+ *                       status:
+ *                         type: string
+ *                         enum: [ACTIVE, INACTIVE]
+ *                         example: INACTIVE
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                         example: "2025-04-29T10:00:00Z"
+ *                       updatedAt:
+ *                         type: string
+ *                         format: date-time
+ *                         example: "2025-04-29T10:00:00Z"
+ *                       deletedAt:
+ *                         type: string
+ *                         format: date-time
+ *                         nullable: true
+ *                         example: null
+ *       500:
+ *         description: Failed to fetch information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Failed to fetch information
+ */
+router.get("/", validateApiKey, sessionController.getWhatsAppAccounts);
+
+/**
+ * @swagger
+ * /session:
  *   post:
  *     summary: Add a new WhatsApp account
  *     description: Create a new WhatsApp account to connect with

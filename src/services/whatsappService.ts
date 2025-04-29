@@ -9,6 +9,7 @@ import { EventEmitter } from "events";
 import logger from "../utils/logger";
 import prisma from "../lib/prisma";
 import { WhatsappAccountStatus } from "@prisma/client";
+import fs from "fs";
 import { formatPhoneNumber } from "../utils/atomics";
 
 const eventEmitter = new EventEmitter();
@@ -48,10 +49,15 @@ export const initWhatsAppConnection = async (
       }
 
       if (connection) {
-        socketStatus[accountId] = connection;
+        socketStatus[accountId] = String(connection);
       }
 
       if (connection === "close") {
+        await prisma.whatsappAccount.update({
+          where: { id: accountId },
+          data: { status: WhatsappAccountStatus.INACTIVE },
+        });
+
         const shouldReconnect =
           (lastDisconnect?.error as Boom)?.output?.statusCode !==
           DisconnectReason.loggedOut;
@@ -67,18 +73,8 @@ export const initWhatsAppConnection = async (
             logger.error(`Reconnecting due to error: ${statusCode}`);
           }
 
-          await prisma.whatsappAccount.update({
-            where: { id: accountId },
-            data: { status: WhatsappAccountStatus.INACTIVE },
-          });
-
           setTimeout(() => initWhatsAppConnection(accountId), 5000);
         } else {
-          await prisma.whatsappAccount.update({
-            where: { id: accountId },
-            data: { status: WhatsappAccountStatus.INACTIVE },
-          });
-
           delete whatsappSockets[accountId];
         }
       } else if (connection === "open") {
@@ -178,7 +174,7 @@ export const sendMediaMessage = async (
           : Buffer.from(mediaContent, "base64"),
         caption: caption || "",
         mimetype: "application/octet-stream",
-        fileName: caption || "document",
+        fileName: caption || "document.pdf",
       };
     }
 
@@ -234,17 +230,16 @@ export const terminateSession = async (accountId: number): Promise<void> => {
   const socket = whatsappSockets[accountId];
 
   try {
-    if (socket) {
-      await socket.logout();
-    }
-
-    await prisma.whatsappAccount.delete({
+    const account = await prisma.whatsappAccount.delete({
       where: { id: accountId },
     });
-
-    await prisma.session.deleteMany({
-      where: { whatsappAccountId: accountId },
-    });
+    try {
+      if (socket.logout) {
+        await socket.logout();
+      }
+      const sessionName = `session_${account.id}_${account.phoneNumber}_${account.createdAt.toLocaleDateString()}`;
+      fs.rmSync(`sessions/${sessionName}`, { recursive: true, force: true });
+    } catch {}
 
     delete whatsappSockets[accountId];
 
