@@ -36,7 +36,7 @@ export const initWhatsAppConnection = async (
     const sock = makeWASocket({
       auth: state,
       printQRInTerminal: false,
-      generateHighQualityLinkPreview: true,
+      generateHighQualityLinkPreview: false,
       browser: Browsers.macOS("Messaging System"),
     });
 
@@ -116,7 +116,7 @@ export const sendTextMessage = async (
   try {
     const result = await socket.sendMessage(
       `${formattedNumber}@s.whatsapp.net`,
-      { text },
+      { text, linkPreview: null },
     );
     const messageId = result?.key.id;
 
@@ -180,7 +180,7 @@ export const sendMediaMessage = async (
 
     const result = await socket.sendMessage(
       `${formattedNumber}@s.whatsapp.net`,
-      messageContent,
+      { ...messageContent, linkPreview: null },
     );
     const messageId = result?.key.id;
 
