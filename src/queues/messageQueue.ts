@@ -115,9 +115,8 @@ export const queueTextMessage = async (
       text,
       apiKeyId,
       messageId: messageLog.id,
-      id: messageLog.id,
     },
-    { retryLimit: config.maxRetryCount },
+    { retryLimit: config.maxRetryCount, retryDelay: 2000, id: messageLog.id },
   );
 
   return messageLog.id;
