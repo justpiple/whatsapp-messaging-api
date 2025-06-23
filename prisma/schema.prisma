@@ -10,7 +10,7 @@ datasource db {
 
 model WhatsappAccount {
   id          Int                   @id @default(autoincrement())
-  phoneNumber String                @unique @map("phone_number")
+  phoneNumber String                @map("phone_number")
   status      WhatsappAccountStatus @default(INACTIVE)
   createdAt   DateTime              @default(now()) @map("created_at")
   updatedAt   DateTime              @updatedAt @map("updated_at")
