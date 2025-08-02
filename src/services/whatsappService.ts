@@ -18,7 +18,7 @@ const whatsappSockets: Record<number, WASocket> = {};
 const socketStatus: Record<number, string> = {};
 
 export const initWhatsAppConnection = async (
-  accountId: number,
+  accountId: number
 ): Promise<string | null> => {
   try {
     const account = await prisma.whatsappAccount.findUnique({
@@ -29,9 +29,11 @@ export const initWhatsAppConnection = async (
       throw new Error(`WhatsApp account with ID ${accountId} not found`);
     }
 
-    const sessionName = `session_${account.id}_${account.phoneNumber}_${account.createdAt.toLocaleDateString()}`;
+    const sessionName = `session_${account.id}_${
+      account.phoneNumber
+    }_${account.createdAt.toLocaleDateString()}`;
     const { state, saveCreds } = await useMultiFileAuthState(
-      `sessions/${sessionName}`,
+      `sessions/${sessionName}`
     );
     const sock = makeWASocket({
       auth: state,
@@ -63,7 +65,7 @@ export const initWhatsAppConnection = async (
           DisconnectReason.loggedOut;
 
         logger.info(
-          `Connection closed for account ${accountId}. Reconnecting: ${shouldReconnect}`,
+          `Connection closed for account ${accountId}. Reconnecting: ${shouldReconnect}`
         );
 
         if (shouldReconnect) {
@@ -95,7 +97,7 @@ export const initWhatsAppConnection = async (
   } catch (error) {
     logger.error(
       `Failed to initialize WhatsApp connection for account ${accountId}:`,
-      error,
+      error
     );
     return null;
   }
@@ -104,7 +106,7 @@ export const initWhatsAppConnection = async (
 export const sendTextMessage = async (
   accountId: number,
   to: string,
-  text: string,
+  text: string
 ): Promise<string> => {
   const formattedNumber = formatPhoneNumber(to);
 
@@ -115,8 +117,8 @@ export const sendTextMessage = async (
 
   try {
     const result = await socket.sendMessage(
-      `${formattedNumber}@s.whatsapp.net`,
-      { text, linkPreview: null },
+      to.includes("@") ? to : `${formattedNumber}@s.whatsapp.net`,
+      { text, linkPreview: null }
     );
     const messageId = result?.key.id;
 
@@ -126,7 +128,7 @@ export const sendTextMessage = async (
   } catch (error) {
     logger.error(
       `Failed to send text message from account ${accountId}:`,
-      error,
+      error
     );
 
     throw error;
@@ -138,7 +140,7 @@ export const sendMediaMessage = async (
   to: string,
   mediaType: "image" | "video" | "document",
   mediaContent: string,
-  caption: string | undefined,
+  caption: string | undefined
 ): Promise<string> => {
   const formattedNumber = formatPhoneNumber(to);
 
@@ -179,8 +181,8 @@ export const sendMediaMessage = async (
     }
 
     const result = await socket.sendMessage(
-      `${formattedNumber}@s.whatsapp.net`,
-      { ...messageContent, linkPreview: null },
+      to.includes("@") ? to : `${formattedNumber}@s.whatsapp.net`,
+      { ...messageContent, linkPreview: null }
     );
     const messageId = result?.key.id;
 
@@ -190,7 +192,7 @@ export const sendMediaMessage = async (
   } catch (error) {
     logger.error(
       `Failed to send media message from account ${accountId}:`,
-      error,
+      error
     );
 
     throw error;
@@ -237,7 +239,9 @@ export const terminateSession = async (accountId: number): Promise<void> => {
       if (socket.logout) {
         await socket.logout();
       }
-      const sessionName = `session_${account.id}_${account.phoneNumber}_${account.createdAt.toLocaleDateString()}`;
+      const sessionName = `session_${account.id}_${
+        account.phoneNumber
+      }_${account.createdAt.toLocaleDateString()}`;
       fs.rmSync(`sessions/${sessionName}`, { recursive: true, force: true });
     } catch {}
 
@@ -247,7 +251,7 @@ export const terminateSession = async (accountId: number): Promise<void> => {
   } catch (error) {
     logger.error(
       `Failed to terminate session for account ${accountId}:`,
-      error,
+      error
     );
     throw error;
   }
@@ -268,11 +272,11 @@ export const autoConnectWhatsAppAccounts = async (): Promise<void> => {
 };
 
 export const restartWhatsAppConnection = async (
-  accountId: number,
+  accountId: number
 ): Promise<string | null> => {
   try {
     logger.info(
-      `Attempting to restart WhatsApp connection for account ${accountId}`,
+      `Attempting to restart WhatsApp connection for account ${accountId}`
     );
 
     const existingSocket = whatsappSockets[accountId];
@@ -281,12 +285,12 @@ export const restartWhatsAppConnection = async (
       try {
         await existingSocket.logout().catch((err) => {
           logger.warn(
-            `Could not logout cleanly for account ${accountId}: ${err.message}`,
+            `Could not logout cleanly for account ${accountId}: ${err.message}`
           );
         });
       } catch (error) {
         logger.warn(
-          `Error during socket logout for account ${accountId}: ${error}`,
+          `Error during socket logout for account ${accountId}: ${error}`
         );
       }
 
@@ -299,13 +303,13 @@ export const restartWhatsAppConnection = async (
     });
 
     logger.info(
-      `Initializing new WhatsApp connection for account ${accountId}`,
+      `Initializing new WhatsApp connection for account ${accountId}`
     );
     const result = await initWhatsAppConnection(accountId);
 
     if (result === null) {
       logger.info(
-        `Successfully initiated reconnection process for account ${accountId}`,
+        `Successfully initiated reconnection process for account ${accountId}`
       );
       return null;
     } else {
@@ -314,7 +318,7 @@ export const restartWhatsAppConnection = async (
   } catch (error) {
     logger.error(
       `Failed to restart WhatsApp connection for account ${accountId}:`,
-      error,
+      error
     );
 
     await prisma.whatsappAccount
