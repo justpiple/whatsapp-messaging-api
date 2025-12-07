@@ -2,7 +2,9 @@ import { ApiKeyRole, PrismaClient } from "@prisma/client";
 import * as dotenv from "dotenv";
 
 dotenv.config();
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasources: { db: { url: "file:../database.db" } },
+});
 
 async function main() {
   const existingAdminKey = await prisma.apiKey.findFirst({

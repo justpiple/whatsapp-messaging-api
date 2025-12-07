@@ -41,6 +41,8 @@ coverage/
 prisma/.env
 prisma/dev.db
 prisma/dev.db-journal
+database.db
+database.db-journal
 
 
 # Temporary files
@@ -53,3 +55,4 @@ Thumbs.db
 
 # Session Folder
 sessions/
+
