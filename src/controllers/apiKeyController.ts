@@ -69,9 +69,9 @@ export const getApiKeys = async (req: Request, res: Response) => {
 export const deleteApiKey = async (req: Request, res: Response) => {
   try {
     const { key_id } = req.params;
-    const keyId = parseInt(key_id, 10);
+    const keyId = Number.parseInt(key_id, 10);
 
-    if (isNaN(keyId)) {
+    if (Number.isNaN(keyId)) {
       return res.status(400).json({ error: "Invalid API key ID" });
     }
 

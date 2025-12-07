@@ -5,11 +5,11 @@ import makeWASocket, {
   useMultiFileAuthState,
 } from "baileys";
 import { Boom } from "@hapi/boom";
-import { EventEmitter } from "events";
+import { EventEmitter } from "node:events";
 import logger from "../utils/logger";
 import prisma from "../lib/prisma";
 import { WhatsappAccountStatus } from "@prisma/client";
-import fs from "fs";
+import fs from "node:fs";
 import { formatPhoneNumber } from "../utils/atomics";
 
 const eventEmitter = new EventEmitter();
@@ -55,10 +55,20 @@ export const initWhatsAppConnection = async (
       }
 
       if (connection === "close") {
-        await prisma.whatsappAccount.update({
-          where: { id: accountId },
-          data: { status: WhatsappAccountStatus.INACTIVE },
-        });
+        try {
+          await prisma.whatsappAccount.update({
+            where: { id: accountId },
+            data: { status: WhatsappAccountStatus.INACTIVE },
+          });
+        } catch (error: unknown) {
+          logger.warn(
+            `Failed to update account ${accountId} status (might be deleted):`,
+            error
+          );
+          delete whatsappSockets[accountId];
+          delete socketStatus[accountId];
+          return;
+        }
 
         const shouldReconnect =
           (lastDisconnect?.error as Boom)?.output?.statusCode !==
@@ -78,14 +88,23 @@ export const initWhatsAppConnection = async (
           setTimeout(() => initWhatsAppConnection(accountId), 5000);
         } else {
           delete whatsappSockets[accountId];
+          delete socketStatus[accountId];
         }
       } else if (connection === "open") {
         logger.info(`Connection established for account ${accountId}`);
 
-        await prisma.whatsappAccount.update({
-          where: { id: accountId },
-          data: { status: WhatsappAccountStatus.ACTIVE },
-        });
+        try {
+          await prisma.whatsappAccount.update({
+            where: { id: accountId },
+            data: { status: WhatsappAccountStatus.ACTIVE },
+          });
+        } catch (error: unknown) {
+          // Account might have been deleted, ignore the error
+          logger.warn(
+            `Failed to update account ${accountId} status to ACTIVE (might be deleted):`,
+            error
+          );
+        }
       }
     });
 
@@ -101,6 +120,55 @@ export const initWhatsAppConnection = async (
     );
     return null;
   }
+};
+
+export const getOrCreateAccountForRecipient = async (
+  recipientNumber: string
+): Promise<number> => {
+  const formattedNumber = formatPhoneNumber(recipientNumber);
+
+  const existingMapping = await prisma.recipientAccountMap.findUnique({
+    where: { recipientNumber: formattedNumber },
+    include: {
+      whatsappAccount: true,
+    },
+  });
+
+  if (
+    existingMapping &&
+    existingMapping.whatsappAccount.status === WhatsappAccountStatus.ACTIVE
+  ) {
+    const socket = whatsappSockets[existingMapping.whatsappAccountId];
+    if (socket) {
+      return existingMapping.whatsappAccountId;
+    }
+  }
+
+  const activeAccount = await prisma.whatsappAccount.findFirst({
+    where: { status: WhatsappAccountStatus.ACTIVE },
+  });
+
+  if (!activeAccount) {
+    throw new Error("No active WhatsApp account available");
+  }
+
+  const socket = whatsappSockets[activeAccount.id];
+  if (!socket) {
+    throw new Error(
+      `No active WhatsApp connection for account ${activeAccount.id}`
+    );
+  }
+
+  await prisma.recipientAccountMap.upsert({
+    where: { recipientNumber: formattedNumber },
+    update: { whatsappAccountId: activeAccount.id },
+    create: {
+      recipientNumber: formattedNumber,
+      whatsappAccountId: activeAccount.id,
+    },
+  });
+
+  return activeAccount.id;
 };
 
 export const sendTextMessage = async (
@@ -122,7 +190,16 @@ export const sendTextMessage = async (
     );
     const messageId = result?.key.id;
 
-    if (!messageId) throw Error("Failed to send message");
+    if (!messageId) throw new Error("Failed to send message");
+
+    await prisma.recipientAccountMap.upsert({
+      where: { recipientNumber: formattedNumber },
+      update: { whatsappAccountId: accountId },
+      create: {
+        recipientNumber: formattedNumber,
+        whatsappAccountId: accountId,
+      },
+    });
 
     return messageId;
   } catch (error) {
@@ -186,7 +263,16 @@ export const sendMediaMessage = async (
     );
     const messageId = result?.key.id;
 
-    if (!messageId) throw Error("Failed to send message");
+    if (!messageId) throw new Error("Failed to send message");
+
+    await prisma.recipientAccountMap.upsert({
+      where: { recipientNumber: formattedNumber },
+      update: { whatsappAccountId: accountId },
+      create: {
+        recipientNumber: formattedNumber,
+        whatsappAccountId: accountId,
+      },
+    });
 
     return messageId;
   } catch (error) {
@@ -199,44 +285,29 @@ export const sendMediaMessage = async (
   }
 };
 
-export const getMessageById = async (accountId: number, messageId: string) => {
-  const socket = whatsappSockets[accountId];
-  if (!socket) {
-    throw new Error(`No active WhatsApp connection for account ${accountId}`);
-  }
-
-  return null;
-
-  // try {
-  //   // const message = await socket.loadMessage(messageId);
-  //   // return message;
-  // } catch (error) {
-  //   logger.error(
-  //     `Failed to get message ${messageId} from account ${accountId}:`,
-  //     error,
-  //   );
-  //   throw error;
-  // }
-};
-
-export const getSocketStatus = async (accountId: number) => {
+export const getSocketStatus = (accountId: number) => {
   const socket = whatsappSockets[accountId];
   if (!socket) {
     return null;
   }
 
-  return socketStatus[accountId] || "unknown";
+  const status = socketStatus[accountId];
+  return status ? String(status) : "unknown";
 };
 
 export const terminateSession = async (accountId: number): Promise<void> => {
   const socket = whatsappSockets[accountId];
 
   try {
+    await prisma.recipientAccountMap.deleteMany({
+      where: { whatsappAccountId: accountId },
+    });
+
     const account = await prisma.whatsappAccount.delete({
       where: { id: accountId },
     });
     try {
-      if (socket.logout) {
+      if (socket?.logout) {
         await socket.logout();
       }
       const sessionName = `session_${account.id}_${
@@ -246,6 +317,7 @@ export const terminateSession = async (accountId: number): Promise<void> => {
     } catch {}
 
     delete whatsappSockets[accountId];
+    delete socketStatus[accountId];
 
     logger.info(`Session terminated for account ${accountId}`);
   } catch (error) {
@@ -283,11 +355,13 @@ export const restartWhatsAppConnection = async (
     if (existingSocket) {
       logger.info(`Terminating existing connection for account ${accountId}`);
       try {
-        await existingSocket.logout().catch((err) => {
-          logger.warn(
-            `Could not logout cleanly for account ${accountId}: ${err.message}`
-          );
-        });
+        if (existingSocket.logout) {
+          await existingSocket.logout().catch((err) => {
+            logger.warn(
+              `Could not logout cleanly for account ${accountId}: ${err.message}`
+            );
+          });
+        }
       } catch (error) {
         logger.warn(
           `Error during socket logout for account ${accountId}: ${error}`
@@ -295,12 +369,23 @@ export const restartWhatsAppConnection = async (
       }
 
       delete whatsappSockets[accountId];
+      delete socketStatus[accountId];
     }
 
-    await prisma.whatsappAccount.update({
-      where: { id: accountId },
-      data: { status: WhatsappAccountStatus.INACTIVE },
-    });
+    try {
+      await prisma.whatsappAccount.update({
+        where: { id: accountId },
+        data: { status: WhatsappAccountStatus.INACTIVE },
+      });
+    } catch (error: unknown) {
+      // Account might have been deleted, ignore the error
+      logger.warn(
+        `Failed to update account ${accountId} status in restart (might be deleted):`,
+        error
+      );
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     logger.info(
       `Initializing new WhatsApp connection for account ${accountId}`
@@ -338,9 +423,9 @@ export default {
   initWhatsAppConnection,
   sendTextMessage,
   sendMediaMessage,
-  getMessageById,
   terminateSession,
   eventEmitter,
   getSocketStatus,
   restartWhatsAppConnection,
+  getOrCreateAccountForRecipient,
 };

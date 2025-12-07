@@ -12,7 +12,9 @@ async function main() {
     },
   });
 
-  if (!existingAdminKey) {
+  if (existingAdminKey) {
+    console.log("Admin API Key already exists");
+  } else {
     const adminKey = await prisma.apiKey.create({
       data: {
         name: "Admin API Key",
@@ -21,16 +23,14 @@ async function main() {
       },
     });
     console.log("Admin API Key created:", adminKey.apiKey);
-  } else {
-    console.log("Admin API Key already exists");
   }
 }
 
 main()
+  .finally(async () => {
+    await prisma.$disconnect();
+  })
   .catch((e) => {
     console.error(e);
     process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
   });

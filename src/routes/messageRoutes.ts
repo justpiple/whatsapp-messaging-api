@@ -9,8 +9,16 @@ const router = Router();
  * @swagger
  * /message:
  *   post:
- *     summary: Send a message via WhatsApp
- *     description: Send text, image, video, or document messages through WhatsApp
+ *     summary: Send a WhatsApp message
+ *     description: |
+ *       Queue a message for delivery via WhatsApp. The message will be sent using a sticky session
+ *       (the same account will be used for the same recipient number if available).
+ *
+ *       Supported message types:
+ *       - **text**: Plain text message
+ *       - **image**: Image with optional caption (URL or base64)
+ *       - **video**: Video with optional caption (URL or base64)
+ *       - **document**: Document file with optional caption (URL or base64)
  *     tags: [Messages]
  *     security:
  *       - ApiKeyAuth: []
@@ -27,121 +35,98 @@ const router = Router();
  *             properties:
  *               phone_number:
  *                 type: string
- *                 description: Recipient's phone number
+ *                 description: Recipient's phone number (with or without country code)
+ *                 example: "6281234567890"
  *               message_type:
  *                 type: string
  *                 enum: [text, image, video, document]
  *                 description: Type of message to send
+ *                 example: "text"
  *               message_content:
  *                 type: string
- *                 description: Content of the message (text or URL/base64 for media)
+ *                 description: |
+ *                   Message content:
+ *                   - For text: plain text string
+ *                   - For media: URL (http/https) or base64 encoded string
+ *                 example: "Hello, this is a test message"
  *               caption:
  *                 type: string
- *                 description: Caption for media messages (optional)
+ *                 description: Optional caption for media messages (image, video, document)
+ *                 example: "Check out this image"
+ *           examples:
+ *             textMessage:
+ *               summary: Text message example
+ *               value:
+ *                 phone_number: "6281234567890"
+ *                 message_type: "text"
+ *                 message_content: "Hello, this is a test message"
+ *             imageMessage:
+ *               summary: Image message example
+ *               value:
+ *                 phone_number: "6281234567890"
+ *                 message_type: "image"
+ *                 message_content: "https://example.com/image.jpg"
+ *                 caption: "Check out this image"
  *     responses:
  *       202:
- *         description: Message queued for delivery
+ *         description: Message successfully queued for delivery
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Message queued for delivery"
+ *                 job_id:
+ *                   type: string
+ *                   description: Unique job identifier for tracking
+ *                   example: "550e8400-e29b-41d4-a716-446655440000"
+ *                 account_id:
+ *                   type: integer
+ *                   description: WhatsApp account ID used for sending
+ *                   example: 1
  *       400:
- *         description: Invalid request
+ *         description: Invalid request parameters
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Invalid message type"
  *       401:
- *         description: Unauthorized
+ *         description: Unauthorized - Invalid or missing API key
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Invalid API key"
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Failed to send message"
  *       503:
  *         description: No active WhatsApp account available
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "No active WhatsApp account available"
  */
 router.post("/", validateApiKey, messageLimiter, messageController.sendMessage);
-
-/**
- * @swagger
- * /message/{message_id}:
- *   get:
- *     summary: Check message status
- *     description: Get the status of a message by its ID
- *     tags: [Messages]
- *     security:
- *       - ApiKeyAuth: []
- *     parameters:
- *       - in: path
- *         name: message_id
- *         required: true
- *         schema:
- *           type: string
- *         description: ID of the message
- *     responses:
- *       200:
- *         description: Message status details
- *       401:
- *         description: Unauthorized
- *       404:
- *         description: Message not found
- */
-router.get("/:message_id", validateApiKey, messageController.getMessageStatus);
-
-/**
- * @swagger
- * /get-message/{message_id}/{account_id}:
- *   get:
- *     summary: Get message from WhatsApp
- *     description: Retrieve a message from WhatsApp by its ID and account ID
- *     tags: [Messages]
- *     security:
- *       - ApiKeyAuth: []
- *     parameters:
- *       - in: path
- *         name: message_id
- *         required: true
- *         schema:
- *           type: string
- *         description: ID of the message
- *       - in: path
- *         name: account_id
- *         required: true
- *         schema:
- *           type: integer
- *         description: ID of the WhatsApp account
- *     responses:
- *       200:
- *         description: Message details
- *       401:
- *         description: Unauthorized
- *       404:
- *         description: Message or account not found
- */
-router.get(
-  "/get-message/:message_id/:account_id",
-  validateApiKey,
-  messageController.getMessage,
-);
-
-/**
- * @swagger
- * /message/{message_id}/cancel:
- *   post:
- *     summary: Cancel pending message
- *     description: Cancel a message that is still in pending status
- *     tags: [Messages]
- *     security:
- *       - ApiKeyAuth: []
- *     parameters:
- *       - in: path
- *         name: message_id
- *         required: true
- *         schema:
- *           type: string
- *         description: ID of the message to cancel
- *     responses:
- *       200:
- *         description: Message canceled successfully
- *       400:
- *         description: Message is not in pending status
- *       401:
- *         description: Unauthorized
- *       404:
- *         description: Message not found
- */
-router.post(
-  "/:message_id/cancel",
-  validateApiKey,
-  messageController.cancelPendingMessage,
-);
 
 export default router;

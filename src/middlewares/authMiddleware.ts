@@ -1,26 +1,25 @@
 import { Request, Response, NextFunction } from "express";
-import { ApiKeyRole, PrismaClient } from "@prisma/client";
+import { ApiKeyRole } from "@prisma/client";
 import logger from "../utils/logger";
+import prisma from "../lib/prisma";
 
-const prisma = new PrismaClient();
+interface ApiKeyData {
+  id: number;
+  name: string;
+  apiKey: string;
+  role: string;
+}
 
-declare global {
-  namespace Express {
-    interface Request {
-      apiKey: {
-        id: number;
-        name: string;
-        apiKey: string;
-        role: string;
-      };
-    }
+declare module "express-serve-static-core" {
+  interface Request {
+    apiKey: ApiKeyData;
   }
 }
 
 export const validateApiKey = async (
   req: Request,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   try {
     const apiKey = req.header("X-API-Key");
@@ -29,7 +28,7 @@ export const validateApiKey = async (
       return res.status(401).json({ error: "API key is required" });
     }
 
-    const validApiKey = await prisma.apiKey.findUnique({
+    const validApiKey = await prisma.apiKey.findFirst({
       where: {
         apiKey,
         deletedAt: null,
@@ -57,7 +56,7 @@ export const validateApiKey = async (
 export const requireAdmin = (
   req: Request,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   if (req.apiKey.role !== ApiKeyRole.ADMIN) {
     return res.status(403).json({ error: "Admin privileges required" });

@@ -3,9 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model WhatsappAccount {
@@ -14,18 +13,17 @@ model WhatsappAccount {
   status      WhatsappAccountStatus @default(INACTIVE)
   createdAt   DateTime              @default(now()) @map("created_at")
   updatedAt   DateTime              @updatedAt @map("updated_at")
-  deletedAt   DateTime?             @map("deleted_at")
 
-  messageLog MessageLog[]
-  Session    Session[]
+  Session             Session[]
+  RecipientAccountMap RecipientAccountMap[]
 
   @@map("whatsapp_accounts")
 }
 
 model Session {
   id         Int    @id @default(autoincrement())
-  identifier String @db.VarChar(255)
-  data       String @db.Text
+  identifier String
+  data       String
 
   WhatsappAccount   WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
   whatsappAccountId Int             @map("whatsapp_account_id")
@@ -35,19 +33,18 @@ model Session {
   @@map("session")
 }
 
-model MessageLog {
-  id         String        @id @default(uuid())
-  messageId  String        @map("message_id")
-  accountId  Int           @map("account_id")
-  status     MessageStatus @default(PENDING)
-  sentTime   DateTime      @default(now()) @map("sent_time")
-  retryCount Int           @default(0) @map("retry_count")
-  sendBy     Int           @map("send_by")
+model RecipientAccountMap {
+  id                Int      @id @default(autoincrement())
+  recipientNumber   String   @map("recipient_number")
+  whatsappAccountId Int      @map("whatsapp_account_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
-  whatsappAccount WhatsappAccount @relation(fields: [accountId], references: [id])
-  apiKey          ApiKey          @relation(fields: [sendBy], references: [id])
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
 
-  @@map("message_logs")
+  @@unique([recipientNumber])
+  @@index([whatsappAccountId])
+  @@map("recipient_account_map")
 }
 
 model ApiKey {
@@ -58,15 +55,7 @@ model ApiKey {
   createdAt DateTime   @default(now()) @map("created_at")
   deletedAt DateTime?  @map("deleted_at")
 
-  messages MessageLog[]
-
   @@map("api_keys")
-}
-
-enum MessageStatus {
-  SENT
-  PENDING
-  FAILED
 }
 
 enum ApiKeyRole {

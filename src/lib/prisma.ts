@@ -1,7 +1,6 @@
 import { PrismaClient } from "@prisma/client";
-import { createSoftDeleteExtension } from "prisma-extension-soft-delete";
 
-const globalForPrisma = global as unknown as {
+const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
@@ -16,20 +15,4 @@ const prisma =
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-const extendedPrisma = prisma.$extends(
-  createSoftDeleteExtension({
-    models: {
-      WhatsappAccount: true,
-      ApiKey: true,
-    },
-    defaultConfig: {
-      field: "deletedAt",
-      createValue: (deleted) => {
-        if (deleted) return new Date();
-        return null;
-      },
-    },
-  }),
-);
-
-export default extendedPrisma;
+export default prisma;

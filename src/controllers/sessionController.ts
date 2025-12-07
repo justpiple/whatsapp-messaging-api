@@ -14,7 +14,7 @@ whatsappService.eventEmitter.on(
   "qr",
   (data: { accountId: number; qr: string }) => {
     qrCodeMap[data.accountId] = data.qr;
-  },
+  }
 );
 
 export const addWhatsAppAccount = async (req: Request, res: Response) => {
@@ -24,7 +24,6 @@ export const addWhatsAppAccount = async (req: Request, res: Response) => {
     const existingAccount = await prisma.whatsappAccount.findFirst({
       where: {
         phoneNumber: phone_number,
-        deletedAt: null,
       },
     });
 
@@ -54,9 +53,9 @@ export const addWhatsAppAccount = async (req: Request, res: Response) => {
 export const getQRCode = async (req: Request, res: Response) => {
   try {
     const { account_id } = req.params;
-    const accountId = parseInt(account_id, 10);
+    const accountId = Number.parseInt(account_id, 10);
 
-    if (isNaN(accountId)) {
+    if (Number.isNaN(accountId)) {
       return res.status(400).json({ error: "Invalid account ID" });
     }
 
@@ -68,39 +67,52 @@ export const getQRCode = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "WhatsApp account not found" });
     }
 
-    const qrCode = qrCodeMap[accountId];
-    if (!qrCode) {
+    const acceptHeader = (req.get("Accept") || "").toLowerCase().trim();
+    const wantsPng =
+      acceptHeader.includes("image/png") &&
+      !acceptHeader.includes("application/json");
+
+    let qrCodeString = qrCodeMap[accountId];
+
+    if (!qrCodeString) {
       await whatsappService.initWhatsAppConnection(accountId);
 
       await new Promise((resolve) => setTimeout(resolve, 5000));
 
-      const newQrCode = qrCodeMap[accountId];
+      qrCodeString = qrCodeMap[accountId];
 
-      if (!newQrCode) {
+      if (!qrCodeString) {
         return res.status(404).json({
           error:
             "QR code not available yet. Please try again in a few seconds.",
         });
       }
-
-      if (req.accepts("application/json")) {
-        return res.json({ qr_code: await qrcode.toDataURL(newQrCode) });
-      }
-
-      res
-        .type("png")
-        .attachment("qrcode.png")
-        .send(await qrcode.toBuffer(newQrCode));
     }
 
-    if (req.accepts("application/json")) {
-      return res.json({ qr_code: await qrcode.toDataURL(qrCode) });
+    if (!wantsPng) {
+      const qrDataURL = await qrcode.toDataURL(qrCodeString);
+      return res.json({ qr_code: qrDataURL });
     }
 
-    res
-      .type("png")
-      .attachment("qrcode.png")
-      .send(await qrcode.toBuffer(qrCode));
+    const qrBuffer = await qrcode.toBuffer(qrCodeString, {
+      type: "png",
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 300,
+    });
+
+    res.status(200);
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Content-Length", qrBuffer.length);
+    res.setHeader("Content-Disposition", "inline; filename=qrcode.png");
+    res.setHeader(
+      "Cache-Control",
+      "no-cache, no-store, must-revalidate, max-age=0"
+    );
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
+    return res.send(qrBuffer);
   } catch (error) {
     logger.error("Error getting QR code:", error);
     return res.status(500).json({ error: "Failed to get QR code" });
@@ -110,9 +122,9 @@ export const getQRCode = async (req: Request, res: Response) => {
 export const checkAccountStatus = async (req: Request, res: Response) => {
   try {
     const { account_id } = req.params;
-    const accountId = parseInt(account_id, 10);
+    const accountId = Number.parseInt(account_id, 10);
 
-    if (isNaN(accountId)) {
+    if (Number.isNaN(accountId)) {
       return res.status(400).json({ error: "Invalid account ID" });
     }
 
@@ -124,7 +136,7 @@ export const checkAccountStatus = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "WhatsApp account not found" });
     }
 
-    const socket = getSocketStatus(accountId);
+    const socketStatus = getSocketStatus(accountId);
 
     return res.json({
       database: {
@@ -132,7 +144,7 @@ export const checkAccountStatus = async (req: Request, res: Response) => {
         phone_number: account.phoneNumber,
         status: account.status,
       },
-      socket,
+      socket: socketStatus ?? null,
     });
   } catch (error) {
     logger.error("Error checking account status:", error);
@@ -143,9 +155,9 @@ export const checkAccountStatus = async (req: Request, res: Response) => {
 export const terminateSession = async (req: Request, res: Response) => {
   try {
     const { session_id } = req.params;
-    const accountId = parseInt(session_id, 10);
+    const accountId = Number.parseInt(session_id, 10);
 
-    if (isNaN(accountId)) {
+    if (Number.isNaN(accountId)) {
       return res.status(400).json({ error: "Invalid session ID" });
     }
 
@@ -174,9 +186,9 @@ export const terminateSession = async (req: Request, res: Response) => {
 export const restartSession = async (req: Request, res: Response) => {
   try {
     const { session_id } = req.params;
-    const accountId = parseInt(session_id, 10);
+    const accountId = Number.parseInt(session_id, 10);
 
-    if (isNaN(accountId)) {
+    if (Number.isNaN(accountId)) {
       return res.status(400).json({ error: "Invalid session ID" });
     }
 

@@ -1,125 +1,101 @@
-import PgBoss from "pg-boss";
+import Queue from "better-queue";
 import whatsappService from "../services/whatsappService";
 import logger from "../utils/logger";
-import prisma from "../lib/prisma";
-import { MessageStatus, WhatsappAccountStatus } from "@prisma/client";
 import { config } from "../config/whatsapp";
-
-const boss = new PgBoss({
-  connectionString: process.env.DATABASE_URL,
-  schema: "message_schedule",
-});
+import { v4 as uuidv4 } from "uuid";
 
 interface TextMessageJob {
+  id: string;
   type: "text";
   accountId: number;
   to: string;
   text: string;
-  apiKeyId: number;
   messageId?: string;
 }
 
 interface MediaMessageJob {
+  id: string;
   type: "media";
   accountId: number;
   to: string;
   mediaType: "image" | "video" | "document";
   mediaContent: string;
   caption?: string;
-  apiKeyId: number;
   messageId?: string;
 }
 
 type MessageJob = TextMessageJob | MediaMessageJob;
 
-boss.work<MessageJob>(
-  "send-message",
-  async (jobs: PgBoss.Job<MessageJob>[]) => {
-    for (let job of jobs) {
-      const data = job.data;
-      try {
-        const account = await prisma.whatsappAccount.findUnique({
-          where: { id: data.accountId },
-        });
+const processMessage = async (
+  job: MessageJob,
+  callback: (error?: Error, result?: string) => void
+) => {
+  try {
+    let messageId: string;
 
-        if (!account || account.status !== WhatsappAccountStatus.ACTIVE) {
-          throw new Error(`WhatsApp account ${data.accountId} is not active`);
-        }
-
-        if (data.type === "text") {
-          await whatsappService.sendTextMessage(
-            data.accountId,
-            data.to,
-            data.text,
-          );
-        } else {
-          await whatsappService.sendMediaMessage(
-            data.accountId,
-            data.to,
-            data.mediaType,
-            data.mediaContent,
-            data.caption,
-          );
-        }
-
-        if (data.messageId) {
-          await prisma.messageLog.update({
-            where: { id: data.messageId },
-            data: {
-              status: MessageStatus.SENT,
-              sentTime: new Date(),
-            },
-          });
-          boss.deleteJob("send-message", job.id);
-        }
-      } catch (error: unknown) {
-        logger.error("Failed to send message:", error);
-
-        if (data.messageId) {
-          await prisma.messageLog.update({
-            where: { id: data.messageId },
-            data: {
-              status: MessageStatus.FAILED,
-            },
-          });
-        }
-
-        throw error;
-      }
+    if (job.type === "text") {
+      messageId = await whatsappService.sendTextMessage(
+        job.accountId,
+        job.to,
+        job.text
+      );
+    } else {
+      messageId = await whatsappService.sendMediaMessage(
+        job.accountId,
+        job.to,
+        job.mediaType,
+        job.mediaContent,
+        job.caption
+      );
     }
+
+    callback(undefined, messageId);
+  } catch (error) {
+    logger.error("Failed to process message job:", error);
+    callback(error as Error);
+  }
+};
+
+const queue = new Queue<MessageJob, string>(processMessage, {
+  store: {
+    type: "memory",
   },
-);
+  maxRetries: config.maxRetryCount,
+  retryDelay: config.retryDelay,
+  concurrent: config.queueConcurrent,
+  maxTimeout: config.queueTimeout,
+});
+
+queue.on("task_finish", (taskId: string, result: string) => {
+  logger.info(`Message job ${taskId} completed successfully: ${result}`);
+});
+
+queue.on("task_failed", (taskId: string, error: Error) => {
+  logger.error(`Message job ${taskId} failed:`, error);
+});
+
+queue.on("task_progress", (taskId: string, progress: number) => {
+  logger.debug(`Message job ${taskId} progress: ${progress}`);
+});
 
 export const queueTextMessage = async (
   accountId: number,
   to: string,
-  text: string,
-  apiKeyId: number,
+  text: string
 ): Promise<string> => {
-  const messageLog = await prisma.messageLog.create({
-    data: {
-      messageId: "",
-      accountId,
-      status: MessageStatus.PENDING,
-      retryCount: 0,
-      sendBy: apiKeyId,
-    },
-  });
+  const jobId = uuidv4();
 
-  await boss.send(
-    "send-message",
-    {
-      type: "text",
-      accountId,
-      to,
-      text,
-      apiKeyId,
-      messageId: messageLog.id,
-    },
-    { retryLimit: config.maxRetryCount, retryDelay: 2000, id: messageLog.id },
-  );
+  const job: TextMessageJob = {
+    id: jobId,
+    type: "text",
+    accountId,
+    to,
+    text,
+  };
 
-  return messageLog.id;
+  queue.push(job);
+
+  return jobId;
 };
 
 export const queueMediaMessage = async (
@@ -127,74 +103,35 @@ export const queueMediaMessage = async (
   to: string,
   mediaType: "image" | "video" | "document",
   mediaContent: string,
-  caption: string | undefined,
-  apiKeyId: number,
+  caption?: string
 ): Promise<string> => {
-  const messageLog = await prisma.messageLog.create({
-    data: {
-      messageId: "",
-      accountId,
-      status: MessageStatus.PENDING,
-      retryCount: 0,
-      sendBy: apiKeyId,
-    },
-  });
+  const jobId = uuidv4();
 
-  await boss.send(
-    "send-message",
-    {
-      type: "media",
-      accountId,
-      to,
-      mediaType,
-      mediaContent,
-      caption,
-      apiKeyId,
-      messageId: messageLog.id,
-      id: messageLog.id,
-    },
-    { retryLimit: config.maxRetryCount },
-  );
+  const job: MediaMessageJob = {
+    id: jobId,
+    type: "media",
+    accountId,
+    to,
+    mediaType,
+    mediaContent,
+    caption,
+  };
 
-  return messageLog.id;
+  queue.push(job);
+
+  return jobId;
 };
 
-const cancelJob = async (jobId: string): Promise<boolean> => {
-  try {
-    const job = await boss.getJobById("send-message", jobId);
-
-    if (!job) {
-      logger.error(`Job with ID ${jobId} does not exist.`);
-      return false;
-    }
-
-    if (job.state === "failed" || job.state === "cancelled") {
-      logger.info(`Job ${jobId} is already processed or being processed.`);
-      return false;
-    }
-
-    await boss.cancel("send-message", jobId);
-    logger.info(`Job ${jobId} has been successfully canceled.`);
-
-    return true;
-  } catch (error) {
-    logger.error(`Failed to cancel job ${jobId}:`, error);
-    return false;
-  }
+export const getQueueStats = () => {
+  // better-queue doesn't expose stats directly
+  // We can return basic info
+  return {
+    message: "Queue stats not available. Better-queue manages jobs internally.",
+  };
 };
-
-boss
-  .start()
-  .then(async () => {
-    logger.info("pg-boss started successfully");
-    await boss.createQueue("send-message");
-  })
-  .catch((error) => {
-    logger.error("Failed to start pg-boss:", error);
-  });
 
 export default {
   queueTextMessage,
   queueMediaMessage,
-  cancelJob,
+  getQueueStats,
 };
