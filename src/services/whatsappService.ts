@@ -1,4 +1,4 @@
-import {
+import makeWASocket, {
   Browsers,
   DisconnectReason,
   WASocket,
@@ -35,8 +35,7 @@ export const initWhatsAppConnection = async (
     const { state, saveCreds } = await useMultiFileAuthState(
       `sessions/${sessionName}`
     );
-    const baileys = await import("baileys");
-    const sock = baileys.makeWASocket({
+    const sock = makeWASocket({
       auth: state,
       printQRInTerminal: false,
       generateHighQualityLinkPreview: false,
