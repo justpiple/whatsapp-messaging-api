@@ -1,6 +1,6 @@
 import { Router } from "express";
-import apiKeyController from "../controllers/apiKeyController";
-import { validateApiKey, requireAdmin } from "../middlewares/authMiddleware";
+import apiKeyController from "../controllers/apiKeyController.js";
+import { validateApiKey, requireAdmin } from "../middlewares/authMiddleware.js";
 
 const router = Router();
 

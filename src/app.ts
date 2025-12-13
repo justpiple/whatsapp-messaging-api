@@ -4,12 +4,12 @@ import helmet from "helmet";
 import morgan from "morgan";
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
-import { apiLimiter } from "./middlewares/rateLimitMiddleware";
-import messageRoutes from "./routes/messageRoutes";
-import sessionRoutes from "./routes/sessionRoutes";
-import apiKeyRoutes from "./routes/apiKeyRoutes";
-import logger from "./utils/logger";
-import { autoConnectWhatsAppAccounts } from "./services/whatsappService";
+import { apiLimiter } from "./middlewares/rateLimitMiddleware.js";
+import messageRoutes from "./routes/messageRoutes.js";
+import sessionRoutes from "./routes/sessionRoutes.js";
+import apiKeyRoutes from "./routes/apiKeyRoutes.js";
+import logger from "./utils/logger.js";
+import { autoConnectWhatsAppAccounts } from "./services/whatsappService.js";
 
 const app = express();
 

@@ -1,7 +1,7 @@
 import { Router } from "express";
-import messageController from "../controllers/messageController";
-import { validateApiKey } from "../middlewares/authMiddleware";
-import { messageLimiter } from "../middlewares/rateLimitMiddleware";
+import messageController from "../controllers/messageController.js";
+import { validateApiKey } from "../middlewares/authMiddleware.js";
+import { messageLimiter } from "../middlewares/rateLimitMiddleware.js";
 
 const router = Router();
 

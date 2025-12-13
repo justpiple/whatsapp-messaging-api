@@ -6,11 +6,11 @@ import {
 } from "baileys";
 import { Boom } from "@hapi/boom";
 import { EventEmitter } from "node:events";
-import logger from "../utils/logger";
-import prisma from "../lib/prisma";
+import logger from "../utils/logger.js";
+import prisma from "../lib/prisma.js";
 import { WhatsappAccountStatus } from "@prisma/client";
 import fs from "node:fs";
-import { formatPhoneNumber } from "../utils/atomics";
+import { formatPhoneNumber } from "../utils/atomics.js";
 
 const eventEmitter = new EventEmitter();
 

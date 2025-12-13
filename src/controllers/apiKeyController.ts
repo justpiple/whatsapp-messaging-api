@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import { ApiKeyRole } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
-import logger from "../utils/logger";
-import prisma from "../lib/prisma";
+import logger from "../utils/logger.js";
+import prisma from "../lib/prisma.js";
 
 export const createApiKey = async (req: Request, res: Response) => {
   try {

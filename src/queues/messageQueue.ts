@@ -1,7 +1,7 @@
 import Queue from "better-queue";
-import whatsappService from "../services/whatsappService";
-import logger from "../utils/logger";
-import { config } from "../config/whatsapp";
+import whatsappService from "../services/whatsappService.js";
+import logger from "../utils/logger.js";
+import { config } from "../config/whatsapp.js";
 import { v4 as uuidv4 } from "uuid";
 
 interface TextMessageJob {

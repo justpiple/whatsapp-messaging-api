@@ -1,5 +1,5 @@
-import prisma from "../lib/prisma";
-import logger from "../utils/logger";
+import prisma from "../lib/prisma.js";
+import logger from "../utils/logger.js";
 
 // Better-queue store interface
 interface QueueItem {

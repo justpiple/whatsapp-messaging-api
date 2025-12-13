@@ -2,9 +2,9 @@ import { Request, Response } from "express";
 import whatsappService, {
   getSocketStatus,
   restartWhatsAppConnection,
-} from "../services/whatsappService";
-import logger from "../utils/logger";
-import prisma from "../lib/prisma";
+} from "../services/whatsappService.js";
+import logger from "../utils/logger.js";
+import prisma from "../lib/prisma.js";
 import { WhatsappAccountStatus } from "@prisma/client";
 import qrcode from "qrcode";
 

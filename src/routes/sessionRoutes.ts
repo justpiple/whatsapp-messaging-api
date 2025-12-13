@@ -1,6 +1,6 @@
 import { Router } from "express";
-import sessionController from "../controllers/sessionController";
-import { validateApiKey, requireAdmin } from "../middlewares/authMiddleware";
+import sessionController from "../controllers/sessionController.js";
+import { validateApiKey, requireAdmin } from "../middlewares/authMiddleware.js";
 
 const router = Router();
 
