@@ -24,7 +24,57 @@ interface MediaMessageJob {
   messageId?: string;
 }
 
-type MessageJob = TextMessageJob | MediaMessageJob;
+export type ButtonAction =
+  | {
+      type: "quick_reply";
+      display_text: string;
+      id: string;
+    }
+  | {
+      type: "cta_url";
+      display_text: string;
+      url: string;
+      merchant_url?: string;
+    }
+  | {
+      type: "cta_call";
+      display_text: string;
+      id: string;
+    }
+  | {
+      type: "cta_copy";
+      display_text: string;
+      id: string;
+      copy_code: string;
+    }
+  | {
+      type: "single_select";
+      display_text: string;
+      title: string;
+      sections: Array<{
+        title: string;
+        rows: Array<{
+          title: string;
+          id: string;
+          description?: string;
+          header?: string;
+        }>;
+        highlight_label?: string;
+      }>;
+    };
+
+interface ButtonMessageJob {
+  id: string;
+  type: "button";
+  accountId: number;
+  to: string;
+  text: string;
+  buttons: Array<ButtonAction>;
+  footer?: string;
+  messageId?: string;
+}
+
+type MessageJob = TextMessageJob | MediaMessageJob | ButtonMessageJob;
 
 const processMessage = async (
   job: MessageJob,
@@ -39,13 +89,25 @@ const processMessage = async (
         job.to,
         job.text
       );
-    } else {
+    } else if (job.type === "media") {
       messageId = await whatsappService.sendMediaMessage(
         job.accountId,
         job.to,
         job.mediaType,
         job.mediaContent,
         job.caption
+      );
+    } else if (job.type === "button") {
+      messageId = await whatsappService.sendButtonMessage(
+        job.accountId,
+        job.to,
+        job.text,
+        job.buttons,
+        job.footer
+      );
+    } else {
+      throw new Error(
+        `Unknown message type: ${(job as MessageJob & { type: string }).type}`
       );
     }
 
@@ -122,6 +184,30 @@ export const queueMediaMessage = async (
   return jobId;
 };
 
+export const queueButtonMessage = async (
+  accountId: number,
+  to: string,
+  text: string,
+  buttons: Array<ButtonAction>,
+  footer?: string
+): Promise<string> => {
+  const jobId = uuidv4();
+
+  const job: ButtonMessageJob = {
+    id: jobId,
+    type: "button",
+    accountId,
+    to,
+    text,
+    buttons,
+    footer,
+  };
+
+  queue.push(job);
+
+  return jobId;
+};
+
 export const getQueueStats = () => {
   // better-queue doesn't expose stats directly
   // We can return basic info
@@ -133,5 +219,6 @@ export const getQueueStats = () => {
 export default {
   queueTextMessage,
   queueMediaMessage,
+  queueButtonMessage,
   getQueueStats,
 };

@@ -3,6 +3,8 @@ import makeWASocket, {
   DisconnectReason,
   WASocket,
   useMultiFileAuthState,
+  generateWAMessageFromContent,
+  proto,
 } from "baileys";
 import { Boom } from "@hapi/boom";
 import { EventEmitter } from "node:events";
@@ -11,6 +13,7 @@ import prisma from "../lib/prisma.js";
 import { WhatsappAccountStatus } from "@prisma/client";
 import fs from "node:fs";
 import { formatPhoneNumber } from "../utils/atomics.js";
+import type { ButtonAction } from "../queues/messageQueue.js";
 
 const eventEmitter = new EventEmitter();
 
@@ -285,6 +288,170 @@ export const sendMediaMessage = async (
   }
 };
 
+export const sendButtonMessage = async (
+  accountId: number,
+  to: string,
+  text: string,
+  buttons: Array<ButtonAction>,
+  footer?: string
+): Promise<string> => {
+  const formattedNumber = formatPhoneNumber(to);
+
+  const socket = whatsappSockets[accountId];
+  if (!socket) {
+    throw new Error(`No active WhatsApp connection for account ${accountId}`);
+  }
+
+  try {
+    const jid = to.includes("@") ? to : `${formattedNumber}@s.whatsapp.net`;
+
+    const msg = generateWAMessageFromContent(
+      jid,
+      {
+        viewOnceMessage: {
+          message: {
+            messageContextInfo: {
+              deviceListMetadata: {},
+              deviceListMetadataVersion: 2,
+            },
+            interactiveMessage: proto.Message.InteractiveMessage.fromObject({
+              body: proto.Message.InteractiveMessage.Body.create({
+                text: text,
+              }),
+              ...(footer && {
+                footer: proto.Message.InteractiveMessage.Footer.create({
+                  text: footer,
+                }),
+              }),
+              nativeFlowMessage:
+                proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+                  buttons: buttons.map((button) => {
+                    if (button.type === "quick_reply") {
+                      return {
+                        name: "quick_reply",
+                        buttonParamsJson: JSON.stringify({
+                          display_text: button.display_text,
+                          id: button.id,
+                        }),
+                      };
+                    } else if (button.type === "cta_url") {
+                      return {
+                        name: "cta_url",
+                        buttonParamsJson: JSON.stringify({
+                          display_text: button.display_text,
+                          url: button.url,
+                          ...(button.merchant_url && {
+                            merchant_url: button.merchant_url,
+                          }),
+                        }),
+                      };
+                    } else if (button.type === "cta_call") {
+                      return {
+                        name: "cta_call",
+                        buttonParamsJson: JSON.stringify({
+                          display_text: button.display_text,
+                          id: button.id,
+                        }),
+                      };
+                    } else if (button.type === "cta_copy") {
+                      return {
+                        name: "cta_copy",
+                        buttonParamsJson: JSON.stringify({
+                          display_text: button.display_text,
+                          id: button.id,
+                          copy_code: button.copy_code,
+                        }),
+                      };
+                    } else if (button.type === "single_select") {
+                      return {
+                        name: "single_select",
+                        buttonParamsJson: JSON.stringify({
+                          title: button.title,
+                          sections: button.sections.map((section) => ({
+                            title: section.title,
+                            ...(section.highlight_label && {
+                              highlight_label: section.highlight_label,
+                            }),
+                            rows: section.rows.map((row) => ({
+                              ...(row.header && { header: row.header }),
+                              title: row.title,
+                              ...(row.description && {
+                                description: row.description,
+                              }),
+                              id: row.id,
+                            })),
+                          })),
+                        }),
+                      };
+                    }
+
+                    throw new Error(
+                      `Unknown button type: ${(button as ButtonAction & { type: string }).type}`
+                    );
+                  }),
+                }),
+            }),
+          },
+        },
+      },
+      { userJid: jid }
+    );
+
+    if (!msg.message) {
+      throw new Error("Failed to generate message");
+    }
+
+    const messageId = msg.key.id;
+
+    if (!messageId) throw new Error("Failed to send message");
+
+    await socket.relayMessage(jid, msg.message, {
+      messageId: messageId,
+      additionalNodes: [
+        {
+          tag: "biz",
+          attrs: {},
+          content: [
+            {
+              tag: "interactive",
+              attrs: {
+                type: "native_flow",
+                v: "1",
+              },
+              content: [
+                {
+                  tag: "native_flow",
+                  attrs: {
+                    name: "quick_reply",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    await prisma.recipientAccountMap.upsert({
+      where: { recipientNumber: formattedNumber },
+      update: { whatsappAccountId: accountId },
+      create: {
+        recipientNumber: formattedNumber,
+        whatsappAccountId: accountId,
+      },
+    });
+
+    return messageId;
+  } catch (error) {
+    logger.error(
+      `Failed to send button message from account ${accountId}:`,
+      error
+    );
+
+    throw error;
+  }
+};
+
 export const getSocketStatus = (accountId: number) => {
   const socket = whatsappSockets[accountId];
   if (!socket) {
@@ -423,6 +590,7 @@ export default {
   initWhatsAppConnection,
   sendTextMessage,
   sendMediaMessage,
+  sendButtonMessage,
   terminateSession,
   eventEmitter,
   getSocketStatus,
